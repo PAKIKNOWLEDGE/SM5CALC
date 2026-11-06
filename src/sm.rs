@@ -63,15 +63,15 @@ pub fn rate_label(index: usize) -> String {
 
 pub fn blurb(chart: &Chart) -> String {
     if chart.notes.len() <= 1 {
-        return "有效音符不到两行，计算器没有给出难度。".to_owned();
+        return "有效音符不足两行，无法计算难度。".to_owned();
     }
     let at_song_rate = chart.ratings[3];
     if at_song_rate.iter().any(|value| !value.is_finite()) {
-        return "计算器没有返回有效数字。".to_owned();
+        return "计算器未能返回有效数值。".to_owned();
     }
     if at_song_rate.iter().all(|value| *value == 0.0) {
         return format!(
-            "1.00 倍的结果是 0。最密的半秒有 {} 行，超过 50 行时计算器会把这一档整段跳过。",
+            "1.00x 速率结果为 0。峰值半秒行数为 {}，超过 MinaCalc 50行/0.5s（100 NPS）的硬性上限，该档已被跳过。",
             chart.max_rows_half
         );
     }
@@ -89,7 +89,7 @@ pub fn blurb(chart: &Chart) -> String {
     }
 
     let mut text = format!(
-        "1.00 倍综合 {:.2}。最高单项是 {} {:.2}，最低单项是 {} {:.2}。从第一颗音符到最后一颗 {:.1} 秒，{} 个有效音符，平均 {:.1} NPS，半秒峰值 {:.1} NPS。",
+        "1.00x 综合 MSD {:.2}。优势属性为 {} ({:.2})，弱势属性为 {} ({:.2})。有效音符跨度 {:.1} 秒，合计 {} 个音符，平均密度 {:.1} NPS，半秒峰值密度 {:.1} NPS。",
         at_song_rate[0],
         labels[top],
         at_song_rate[top],
@@ -101,7 +101,7 @@ pub fn blurb(chart: &Chart) -> String {
         chart.peak_nps
     );
     if chart.ratings.iter().skip(4).any(|row| row[0] == 0.0) {
-        text.push_str(" 更高倍速里出现 0，是压缩之后某个半秒超过了 50 行。");
+        text.push_str(" 注意：部分高倍速档位显示为 0，系时间压缩后局部密度超出了计算器上限。");
     }
     text
 }
@@ -116,15 +116,15 @@ pub fn parse_sm(path: &Path, bytes: &[u8]) -> Result<Song, String> {
         .unwrap_or_else(|| {
             path.file_stem()
                 .map(|stem| stem.to_string_lossy().into_owned())
-                .unwrap_or_else(|| "未命名".to_owned())
+                .unwrap_or_else(|| "未命名曲目".to_owned())
         });
-    let artist = tag_value(&tags, "ARTIST").unwrap_or_else(|| "未知".to_owned());
+    let artist = tag_value(&tags, "ARTIST").unwrap_or_else(|| "未知艺术家".to_owned());
 
     let mut warnings = Vec::new();
     let timing = match tags.iter().find(|(name, _)| name == "BPMS") {
         Some((_, value)) => Timing::from_tag_values(value, &tags, &mut warnings),
         None => {
-            warnings.push("文件里没有 #BPMS，按 60 处理了。".to_owned());
+            warnings.push("谱面未包含 #BPMS 标签，默认使用固定 BPM 60。".to_owned());
             Timing::default_bpm()
         }
     };
@@ -142,9 +142,9 @@ pub fn parse_sm(path: &Path, bytes: &[u8]) -> Result<Song, String> {
     }
     if charts.is_empty() {
         if saw_notes {
-            return Err("有 #NOTES，但字段不完整，没有读出谱面。".to_owned());
+            return Err("检测到 #NOTES 字段，但格式不完整或字段不足，未能解析出有效谱面。".to_owned());
         }
-        return Err("这个文件里没有 #NOTES。".to_owned());
+        return Err("文件中未检测到 #NOTES 谱面数据。".to_owned());
     }
 
     Ok(Song {
@@ -499,7 +499,7 @@ impl Timing {
             fakes: dedupe_last(parse_pairs(tag_raw(tags, "FAKES"))),
         };
         if timing.bpms.iter().any(|seg| seg.value == 0.0) {
-            warnings.push("有一段 BPM 是 0，这一段的时间和游戏可能对不上。".to_owned());
+            warnings.push("检测到 BPM 为 0 的异常片段，计算时间轴可能与游戏内存在偏差。".to_owned());
         }
         if timing.bpms.is_empty() {
             timing.bpms.push(Seg { row: 0, value: 60.0 });

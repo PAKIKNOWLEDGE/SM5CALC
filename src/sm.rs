@@ -19,6 +19,7 @@ pub struct Chart {
     pub avg_nps: f32,
     pub peak_nps: f32,
     pub max_rows_half: u32,
+    pub nps_timeline: Vec<f32>,
     pub ratings: [[f32; 8]; 14],
 }
 
@@ -289,7 +290,7 @@ fn parse_chart(value: &str, timing: &Timing) -> Option<Chart> {
         }
     }
 
-    let (note_count, duration, avg_nps, peak_nps, max_rows_half) = density(&notes);
+    let (note_count, duration, avg_nps, peak_nps, max_rows_half, nps_timeline) = density(&notes);
     Some(Chart {
         steps_type,
         description,
@@ -302,6 +303,7 @@ fn parse_chart(value: &str, timing: &Timing) -> Option<Chart> {
         avg_nps,
         peak_nps,
         max_rows_half,
+        nps_timeline,
         ratings: [[0.0; 8]; 14],
     })
 }
@@ -430,7 +432,7 @@ fn count_columns(line: &str) -> u32 {
     column
 }
 
-fn density(notes: &[Note]) -> (u32, f32, f32, f32, u32) {
+fn density(notes: &[Note]) -> (u32, f32, f32, f32, u32, Vec<f32>) {
     let mut note_count = 0u32;
     let mut rows_and_taps: Vec<(i32, u32, u32)> = Vec::new();
     for note in notes {
@@ -453,7 +455,16 @@ fn density(notes: &[Note]) -> (u32, f32, f32, f32, u32) {
     } else {
         note_count as f32
     };
-    (note_count, duration, avg_nps, peak_nps, max_rows_half)
+
+    let total_buckets = ((duration / 0.5).ceil() as usize).max(1);
+    let mut nps_timeline = vec![0.0f32; total_buckets];
+    for (bucket_idx, _, taps) in &rows_and_taps {
+        if *bucket_idx >= 0 && (*bucket_idx as usize) < total_buckets {
+            nps_timeline[*bucket_idx as usize] = *taps as f32 * 2.0;
+        }
+    }
+
+    (note_count, duration, avg_nps, peak_nps, max_rows_half, nps_timeline)
 }
 
 fn beat_to_row(beat: f32) -> i32 {
